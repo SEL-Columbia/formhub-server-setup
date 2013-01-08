@@ -9,12 +9,12 @@
 #                           - backups      ** a place for backups
 
 #where your projects live:
-project_root: /home/ubuntu/srv
+project_root: /path/to/projects
 
 #the URL for this project
-hostname: hl
+hostname: www.example.com
 #the admin email (used in the apache config file)
-admin_email: ukanga@gmail.com
+admin_email: someone@example.com
 #the user that the server will run as (used in the apache config)
 server_user: ubuntu
 # everything will be installed in "/%{project_root}/${install_name}"
