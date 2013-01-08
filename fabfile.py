@@ -93,7 +93,7 @@ def server_setup(deployment_name):
 def server_config(deployment_name):
     setup_env(deployment_name)
     nginx_cfg = os.path.join(env.project_directory, 'nginx', 'site.conf')
-    sudo("ln -s %s /etc/nginx/sites-enabled/%s" % (nginx_cfg, deployment_name))
+    sudo("ln -s %s /etc/nginx/sites-enabled/%s.conf" % (nginx_cfg, deployment_name))
     celeryd_file = os.path.join(env.project_directory, 'celery', 'celeryd')
     sudo("cp %s /etc/init.d/celeryd" % celeryd_file)
     sudo("chmod +x /etc/init.d/celeryd")
