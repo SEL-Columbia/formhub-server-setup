@@ -78,8 +78,8 @@ def server_setup(deployment_name):
     sudo("apt-get -y install apt-fast")
     sudo("test -f /tmp/apt-fast.lock && rm /tmp/apt-fast.lock || ls")
     sudo("apt-fast -y upgrade")
-    sudo("apt-fast -y install default-jre gcc git python-dev "
-        "python-virtualenv libjpeg-dev libfreetype6-dev zlib1g-dev "
+    sudo("apt-fast -y install default-jre gcc git python-dev")
+    sudo(" apt-fast -y install python-virtualenv libjpeg-dev libfreetype6-dev zlib1g-dev "
         "rabbitmq-server nginx monit")
     sudo("apt-fast -y install mongodb")
     run("mkdir -p %s" % env.home)
