@@ -1,0 +1,210 @@
+#!/bin/bash
+# vim: ai ts=4 sts=4 et sw=4 fileencoding=utf-8
+# maintainer:ukanga
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+PASSPHRASE=
+
+SIGN_KEY=
+ENCRYPT_KEY=
+FH_KEY_PASS=
+
+SOURCE=
+BUCKET=
+DUP_LOG=
+# set email to receive a backup report
+EMAIL=""
+
+SQL_HOST=
+SQL_USER=
+SQL_PASS=
+SQL_OUT=
+SQL_TARGET=
+SQL_DB=
+BACKUP_TARGET=
+BACKUP_NAME="backup"
+TEST_TARGET=
+
+if [ -r ~/.backup_config ]; then
+      source ~/.backup_config
+fi
+
+export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+export PASSPHRASE=$PASSPHRASE
+
+DUP_TARGET=$BACKUP_TARGET
+
+check_config()
+{
+    echo -n "Backup script configuration... "
+    if [[ -z $AWS_SECRET_ACCESS_KEY || -z $AWS_ACCESS_KEY_ID || -z $FH_KEY_PASS || -z $BUCKET || -z $SIGN_KEY || -z $ENCRYPT_KEY ]]; then
+        return 1
+    fi
+}
+
+backup_admin()
+{
+    if [ $? -ne 0 ]; then
+        echo "Failed. Exiting."
+        # TODO: add email support
+        exit $?
+    else
+        echo "Succeeded."
+    fi
+}
+
+s3_full_backup()
+{
+    ACTION="Full backup to  $BUCKET. "
+    export PASSPHRASE=$FH_KEY_PASS
+    export SIGN_PASSPHRASE=$FH_KEY_PASS
+
+    duplicity full --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets $SQL_TARGET $DUP_TARGET
+    RETVAL=$?
+    unset PASSPHRASE
+    unset SIGN_PASSPHRASE
+    echo -n $ACTION
+    return $RETVAL
+}
+
+s3_backup()
+{
+    ACTION="Backup to $BUCKET. "
+    export PASSPHRASE=$FH_KEY_PASS
+    export SIGN_PASSPHRASE=$FH_KEY_PASS
+
+    duplicity --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets $SQL_TARGET $DUP_TARGET
+    RETVAL=$?
+    unset PASSPHRASE
+    unset SIGN_PASSPHRASE
+    echo -n $ACTION
+    return $RETVAL
+}
+
+s3_restore()
+{
+    ACTION="Restore $1"
+    if [ $# = 2 ]; then
+        ACTION="$ACTION from $2. "
+        duplicity restore --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets --file-to-restore $1 $DUP_TARGET $2
+        RETVAL=$?
+    else
+        ACTION="$ACTION from $3 given date $2. "
+        duplicity restore --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets --file-to-restore $1 --time $2 $DUP_TARGET $3
+        RETVAL=$?
+    fi
+    echo -n $ACTION
+    return $RETVAL
+}
+
+s3_list_files()
+{
+    ACTION="List files $DUP_TARGET"
+    duplicity list-current-files --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets $DUP_TARGET
+    RETVAL=$?
+    echo -n $ACTION
+    return $RETVAL
+}
+
+mysql_config()
+{
+    SQL_TARGET=$SQL_TARGET
+    DUP_TARGET="$BUCKET/mysql"
+    BACKUP_NAME="formhub_mysql"
+}
+
+mysql_backup()
+{
+    ACTION="Performing mysql backup. "
+
+    mysqldump -h $SQL_HOST -u$SQL_USER -p$SQL_PASS $SQL_DB > $SQL_OUT
+    RETVAL=$?
+
+    mysql_config
+    echo -n $ACTION
+    return $RETVAL
+}
+
+mongo_config()
+{
+    SQL_TARGET=$MONGO_OUT
+    DUP_TARGET="$BUCKET/mongodb"
+    BACKUP_NAME="formhub_mongodb"
+}
+
+mongo_backup()
+{
+    ACTION="Performing MongoDB backup. "
+
+    mongodump --db $MONGO_DB --out  $MONGO_OUT
+    RETVAL=$?
+    mongo_config
+    echo -n $ACTION
+    return $RETVAL
+}
+
+check_config
+backup_admin
+
+if [ "$1" = "full" ]; then
+    mysql_backup
+    backup_admin
+    s3_full_backup
+    backup_admin
+    mongo_backup
+    backup_admin
+    s3_full_backup
+    backup_admin
+elif [ "$1" = "mongo" ]; then
+    mongo_backup
+    backup_admin
+    backup_admin
+    s3_backup
+elif [ "$1" = "test" ]; then
+    SQL_TARGET=$TEST_TARGET
+    DUP_TARGET="$BUCKET/testking"
+    BACKUP_NAME="testking"
+    s3_backup
+    backup_admin
+elif [[ ("$1" = "restore") && ("$2" = "mysql") ]]; then
+    mysql_config
+    if [ $# = 4 ]; then
+        s3_restore $3 $4
+        backup_admin
+    else
+        s3_restore $3 $4 $5
+        backup_admin
+    fi
+elif [[ "$1" = "restore" && "$2" = "mongodb" ]]; then
+    mongo_config
+    if [ $# = 4 ]; then
+        s3_restore $3 $4
+        backup_admin
+    else
+        s3_restore $3 $4 $5
+        backup_admin
+    fi
+elif [[ "$1" = "restore" && "$2" = "test" ]]; then
+    SQL_TARGET=$TEST_TARGET
+    DUP_TARGET="$BUCKET/testking"
+    BACKUP_NAME="testking"
+    if [ $# = 4 ]; then
+        s3_restore $3 $4
+        backup_admin
+    else
+        s3_restore $3 $4 $5
+        backup_admin
+    fi
+elif [[ "$1" = "list" && "$2" = "test" ]]; then
+    SQL_TARGET=$TEST_TARGET
+    DUP_TARGET="$BUCKET/testking"
+    BACKUP_NAME="testking"
+    s3_list_files
+    backup_admin
+fi
+export AWS_ACCESS_KEY_ID=
+export AWS_SECRET_ACCESS_KEY=
+export PASSPHRASE=
+export SIGN_PASSPHRASE=
