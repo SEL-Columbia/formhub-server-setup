@@ -101,7 +101,7 @@ s3_restore()
 
 s3_list_files()
 {
-    ACTION="List files $DUP_TARGET"
+    ACTION="List files $DUP_TARGET. "
     duplicity list-current-files --sign-key "$SIGN_KEY" --encrypt-key "$ENCRYPT_KEY" --log-file $DUP_LOG --name $BACKUP_NAME --s3-use-new-style --s3-european-buckets $DUP_TARGET
     RETVAL=$?
     echo -n $ACTION
@@ -148,7 +148,16 @@ mongo_backup()
 check_config
 backup_admin
 
-if [ "$1" = "full" ]; then
+if [ "$1" = "all" ]; then
+    mysql_backup
+    backup_admin
+    s3_backup
+    backup_admin
+    mongo_backup
+    backup_admin
+    s3_backup
+    backup_admin
+elif [ "$1" = "full" ]; then
     mysql_backup
     backup_admin
     s3_full_backup
@@ -157,11 +166,16 @@ if [ "$1" = "full" ]; then
     backup_admin
     s3_full_backup
     backup_admin
+elif [ "$1" = "mysql" ]; then
+    mysql_backup
+    backup_admin
+    s3_backup
+    backup_admin
 elif [ "$1" = "mongo" ]; then
     mongo_backup
     backup_admin
-    backup_admin
     s3_backup
+    backup_admin
 elif [ "$1" = "test" ]; then
     SQL_TARGET=$TEST_TARGET
     DUP_TARGET="$BUCKET/testking"
@@ -197,14 +211,36 @@ elif [[ "$1" = "restore" && "$2" = "test" ]]; then
         s3_restore $3 $4 $5
         backup_admin
     fi
+elif [[ "$1" = "list" && "$2" = "mongo" ]]; then
+    mongo_config
+    s3_list_files
+    backup_admin
+elif [[ "$1" = "list" && "$2" = "mysql" ]]; then
+    mysql_config
+    s3_list_files
+    backup_admin
 elif [[ "$1" = "list" && "$2" = "test" ]]; then
     SQL_TARGET=$TEST_TARGET
     DUP_TARGET="$BUCKET/testking"
     BACKUP_NAME="testking"
     s3_list_files
     backup_admin
+else
+    echo "
+    fh_backup - manage duplicity backup to s3
+
+    USAGE:
+  
+    ./fh_backup all # backups up both mysql and mongo
+    ./fh_backup full # forces duplicity to do a full backup of mysql and mongo
+    ./fh_backup mongo | mysql | test  # specific backup
+    ./fh_backup restore mongodb | mysql | test file_to_restore [datetime] restore_path
+    ./fh_backup list mysql | mongo | test
+    "
 fi
+
 export AWS_ACCESS_KEY_ID=
 export AWS_SECRET_ACCESS_KEY=
 export PASSPHRASE=
 export SIGN_PASSPHRASE=
+
